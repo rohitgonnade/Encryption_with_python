@@ -149,6 +149,116 @@ same password + different salt → different key → decryption fails ❌
 Would you like a clear code example that shows encrypting with a salt and saving it, then decrypting using the saved salt?
 
 
+## Using AESGCM mode
+
+Great catch — and you're absolutely right to be curious. Let's walk through this carefully:
+
+---
+
+### 🔐 AES Modes: Padding Required vs Not
+
+There are **two types of AES encryption modes** to consider here:
+
+| AES Mode            | Requires Manual Padding?  | Authenticated (Integrity-Checked)? |
+| ------------------- | ------------------------- | ---------------------------------- |
+| **ECB / CBC**       | ✅ Yes (must pad manually) | ❌ No                               |
+| **GCM / CCM / EAX** | ❌ No padding needed       | ✅ Yes                              |
+
+---
+
+### ✅ Why Padding Was *Not* Needed in This Case
+
+You're using **AES-GCM** (`AESGCM` class from `cryptography.hazmat.primitives.ciphers.aead`). This is a **stream cipher mode**, and it **does *not* require padding**. Here's why:
+
+> AES-GCM handles plaintext of **any length**, because it encrypts in chunks internally — similar to a stream cipher. It does not expect the input to be block-aligned (like 16, 32, 48 bytes etc.).
+
+So this line works just fine:
+
+```python
+ciphertext = aesgcm.encrypt(iv, plaintext.encode(), None)
+```
+
+Even if `plaintext.encode()` is 7 bytes, 23 bytes, or 75 bytes — **no padding needed**.
+
+---
+
+### 🚫 If You Were Using AES-CBC Instead…
+
+If you had used CBC mode like:
+
+```python
+cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+```
+
+Then you *must* pad manually, otherwise you’ll get:
+
+```
+ValueError: The length of the provided data is not a multiple of the block length.
+```
+
+---
+
+### ✅ Summary
+
+* Your original code **uses AES-GCM**, which **doesn't require padding**.
+* That's why you could encrypt any-length string and it still worked.
+* If you switched to ECB or CBC, you'd need to manually pad using `Crypto.Util.Padding` or similar.
+
+
+### Integrity-Checked
+
+Great question.
+
+### ✅ Integrity-Checked (or *Authenticated Encryption*)
+
+When we say an encryption mode is **integrity-checked**, we mean:
+
+> It **verifies** during decryption that the data hasn’t been **modified, corrupted, or tampered with**.
+
+This is a **crucial security feature**, especially if encrypted data is sent over a network or stored where someone might try to alter it.
+
+---
+
+### 🔍 Why This Matters
+
+* If you **just encrypt data (like with AES-CBC)**, it protects **confidentiality** (the attacker can’t read it).
+* But if someone **modifies even 1 byte** of the ciphertext (or IV), CBC will decrypt garbage — and you won’t know it.
+* With **AES-GCM**, decryption **fails completely** if the ciphertext or IV is tampered with. It **detects and rejects** corrupted data.
+
+This is what makes AES-GCM an **"authenticated encryption mode" (AEAD)**.
+
+---
+
+### 🔐 Example
+
+Let’s say we encrypt `"The eagle has landed."` with AES-GCM and later someone modifies the encrypted text.
+
+```python
+# When decrypting with AES-GCM
+plaintext = aesgcm.decrypt(iv, tampered_ciphertext, None)
+```
+
+You'll get:
+
+```
+cryptography.exceptions.InvalidTag: Authentication tag mismatch
+```
+
+This error tells you **something was altered** — and the system **refuses to give you any decrypted data**.
+
+---
+
+### 🔐 TL;DR
+
+| Mode    | Keeps Data Secret? | Detects Tampering? |
+| ------- | ------------------ | ------------------ |
+| AES-CBC | ✅ Yes              | ❌ No               |
+| AES-GCM | ✅ Yes              | ✅ Yes              |
+
+If you're storing user conversations or sensitive data, **always prefer AES-GCM or another AEAD** (authenticated encryption with associated data) mode.
+
+
+
 ## ✅ Requirements
 
 Install the required library:
