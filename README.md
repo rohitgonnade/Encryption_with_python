@@ -88,6 +88,67 @@ You **don’t reuse the salt** — you just **store it per message or file**. Th
 
 ---
 
+
+## IS new AES key is generated each time
+
+Yes, you're right in **observing** that a new key is generated **each time you use a new salt**.
+
+Let me clarify how it works:
+
+---
+
+### 🔐 **Key Derivation from Password + Salt**
+
+Every time you do this:
+
+```python
+key = PBKDF2HMAC(..., salt=salt, ...).derive(password)
+```
+
+The **key is derived from both the password and the salt**.
+
+---
+
+### ✅ So why use a random salt?
+
+* The salt **prevents precomputed attacks** (like rainbow tables).
+* Even if two users use the same password, **different salts → different keys**.
+* It makes brute-force attacks **much harder**.
+
+---
+
+### ⚠️ But yes — **if you use a *different* salt next time**, the same password will produce a **different key**.
+
+---
+
+### 🧠 **How to handle this correctly**
+
+* When you **create a key**, **generate a random salt**.
+* Then **store the salt** securely **alongside the encrypted data** (e.g., in a database, or even prepended to the ciphertext).
+* Later, when decrypting, **retrieve the same salt** and **use it again with the same password** to regenerate the same key.
+
+That way:
+
+```plaintext
+same password + same salt → same key → successful decryption ✅
+```
+
+But:
+
+```plaintext
+same password + different salt → different key → decryption fails ❌
+```
+
+---
+
+### 🔄 Summary
+
+* Yes, using a **different salt each time** results in a **different key**, even with the same password.
+* This is **by design** — and why the **salt must be stored** if you want to reproduce the key later.
+
+Would you like a clear code example that shows encrypting with a salt and saving it, then decrypting using the saved salt?
+
+
 ## ✅ Requirements
 
 Install the required library:
